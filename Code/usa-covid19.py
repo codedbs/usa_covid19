@@ -49,13 +49,27 @@ latest_date = sdf.agg(F.max('date').alias('max_data'))
 latest_date.show()
 
 
-# the latest date avilable is 2020-04-13
+# the latest date avilable is 2020-04-21
+latest_date = latest_date.collect()
+latest_date
+
+latest_date = latest_date[0]['max_data']
+latest_date
+
 # filtering the data where this date is present
 sdf_filtered = sdf.where(
     "date = '{}'".format(latest_date)
 )
 
 sdf_filtered.show(2)
+
+
+## testing using sql
+
+latest_date_sql = sqlContext.sql(
+    """ SELECT * FROM covid_data WHERE date = '{}'""".format(latest_date)
+)
+latest_date_sql.show(10)
 
 
 ## Overall Statistics
@@ -108,3 +122,85 @@ filtered_county_rec.count()
 
 # so the dataframe returned is empty - containing no rows
 filtered_county_rec.show()
+
+
+
+## Some joins operations
+
+
+
+left_table = county_summary.where(
+    "county in ('Adair', 'Addison')"
+)
+left_table.show(5, False)
+
+right_table = county_summary.where(
+    "county in ('Ada', 'Accomack')"
+)
+right_table.show(5, False)
+
+inner_table = county_summary.join(
+    left_table,
+    on=["county"],
+    how="inner"
+)
+
+inner_table.show(100, False)
+
+
+# applying left join
+left_table_joined = left_table.join(
+    right_table,
+    on=["county"],
+    how="left"
+)
+
+left_table_joined.show(100, False)
+
+# applying right join
+right_table_joined = left_table.join(
+    right_table,
+    on=["county"],
+    how="right"
+)
+
+right_table_joined.show(100, False)
+
+
+# applying  full join
+outer_table_joined = left_table.join(
+    right_table,
+    on=["county"],
+    how="outer"
+)
+
+outer_table_joined.show(100, False)
+
+
+# get percentage # of cases for each state in Adair
+# filter data for county - Adair
+adir_overall = county_summary.where(
+    "county in ('Adair')"
+)
+adir_overall.show(5, False)
+
+# join the Adair summary to its states
+perc_cases_statewise = sdf_filtered.join(
+    adir_overall,
+    on="county",
+    how="inner"
+)
+
+perc_cases_statewise.show(10, False)
+
+
+# calculate percentage of cases and deaths
+perc_cases_statewise = perc_cases_statewise.withColumn(
+    "perc_cases",
+    F.col("cases")/F.col("total_cases")
+).withColumn(
+    "perc_deaths",
+    F.col("deaths")/F.col("total_deaths")
+)
+
+perc_cases_statewise.show(10, False)
