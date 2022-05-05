@@ -6,6 +6,7 @@ import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
+from pyspark.sql.window import Window
 
 # Initializing PySpark
 
@@ -204,3 +205,82 @@ perc_cases_statewise = perc_cases_statewise.withColumn(
 )
 
 perc_cases_statewise.show(10, False)
+
+
+## Partition By and Window Function
+
+
+#print out few records to check the structure of the dataframe
+county_summary.show(2, False)
+
+
+#  creating a new column and store the new dataframe as county_summary_ranked
+
+county_summary_ranked = county_summary.withColumn(
+    "rank",
+    F.rank().over(Window.orderBy("total_cases")) 
+)
+# print out some of the records
+county_summary_ranked.show(5, False)
+
+county_summary_ranked = county_summary_ranked.withColumn(
+    "rank_desc",
+    F.rank().over(Window.orderBy(F.desc("total_cases")))
+)
+
+# ordering the data by total_cases in descending order
+county_summary_ranked.orderBy("total_cases", ascending=False).show(5, False)
+
+sdf_filtered.show(2, False)
+
+sdf_filtered.count()
+
+
+#  creating a new dataframe - ranked_states
+ranked_states = sdf_filtered.withColumn(
+    "state_rank",
+    F.rank().over(Window.partitionBy("county").orderBy(F.desc("cases")))
+)
+
+# show top 30 records ordered on county and state_rank
+ranked_states.orderBy("county", "state_rank").show(30, False)
+
+
+#  filtering out only the top state for each of the county
+ranked_states_filtered = ranked_states.filter(
+    "state_rank = 1"
+)
+
+# checking the count which should be equal to the number of counties in the dataset
+ranked_states_filtered.count()
+
+#  checking the results
+ranked_states_filtered.orderBy("county", "state_rank").show(50, False)
+
+
+# assigning the parition by clause in a variable - w
+partition_clause = Window.partitionBy("county")
+
+
+# getting the total, average and maximum county cases across each of their respective states
+ranked_states = ranked_states.withColumn(
+    "country_total_cases",
+    F.sum("cases").over(partition_clause)
+).withColumn(
+    # calculating the % of cases in a state i.e. state_cases/respective_county_cases
+    "perc_total_cases",
+    F.col("cases")/F.col("country_total_cases")
+).withColumn(
+    "country_avg_cases",
+    # get county average cases
+    F.avg("cases").over(partition_clause)
+).withColumn(
+    # get county max caaes
+    "country_max_cases",
+    F.max("cases").over(partition_clause)
+)
+
+# print out the results
+ranked_states.orderBy("county", "perc_total_cases").show(50, False)
+
+
