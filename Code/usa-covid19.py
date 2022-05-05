@@ -284,3 +284,121 @@ ranked_states = ranked_states.withColumn(
 ranked_states.orderBy("county", "perc_total_cases").show(50, False)
 
 
+
+
+## code automation
+
+class Covid19():
+    
+    def __init__(self, sqlContext, filename):
+        
+        # input the spark context
+        self.sqlContext = sqlContext
+        # input the file
+        self.filename = filename
+        
+        # create the spark dataframe from the file
+        pdf = pd.read_csv(self.filename)
+        # convert pandas dataframe in pyspark datafram and save it in a class variable
+        self.covid19_dataset = self.sqlContext.createDataFrame(pdf)
+    
+    
+    def get_date(self, min_max="max"):
+        
+        # ensure the value is either 'min' or 'max'
+        assert min_max in ('min', 'max')
+        
+        if min_max == 'min':
+            return self.covid19_dataset.agg(F.min("date").alias("min_date")).collect()[0]['min_date']
+        else:
+            return self.covid19_dataset.agg(F.max("date").alias("max_date")).collect()[0]['max_date']
+    
+    
+    def get_overall_numbers(self, date='max'):
+        
+        # get the max/min date
+        if date == "max" or date == 'min':
+            date = self.get_date(date)
+            
+        # if no date is provided then filter on date is not required else filter on the date
+        if date == None:
+            filtered_data = self.covid19_dataset
+        else:
+            # filter the data
+            filtered_data = self.covid19_dataset.filter(F.col("date") == date)
+            
+        # group on date and calculate the metrics
+        overall_summary = filtered_data.groupBy(
+                                "date"
+                            ).agg(
+                                F.sum("cases").alias("total_cases"),
+                                F.sum("deaths").alias("total_deaths"),
+                                F.countDistinct("county").alias("num_of_counties"),
+                                F.countDistinct("state").alias("num_of_states"),
+                            )
+        
+        # return the summary dataframe
+        return overall_summary
+    
+    
+    def get_county_numbers(self, date='max', county=None):
+       
+        # get the max/min date
+        if date == "max" or date == 'min':
+            date = self.get_date(date)
+        
+        # if no date is provided then filter on date is not required else filter on the date
+        if date == None:
+            filtered_data = self.covid19_dataset
+        else:
+            filtered_data = self.covid19_dataset.filter(F.col("date") == date)
+            
+            
+        # filter data for a county if provided else no filtering on data is required
+        if county == None:
+            pass
+        else:
+            filtered_data = filtered_data.filter(F.col("county") == county)
+            
+        #  group on both date and county. This will return the metrics for each county for every date
+        county_summary = filtered_data.groupBy(
+                                "date", "county"
+                            ).agg(
+                                F.sum("cases").alias("total_cases"),
+                                F.sum("deaths").alias("total_deaths"),
+                                F.countDistinct("state").alias("num_of_states")
+                            )
+        
+        # return the summary
+        return county_summary
+    
+    
+# now create an object of the class
+# pass the required parameters
+covid19_class_obj = Covid19(
+                        sqlContext= sqlContext, 
+                        filename='../Data/us-counties.csv')
+
+# check the type of the object
+type(covid19_class_obj)
+
+
+# access the spark dataframe using the class object
+covid19_class_obj.covid19_dataset.show(2, False)
+
+#  using the method-get_overall_numbers() and get the metrics for the latest date (max date)
+covid19_class_obj.get_overall_numbers(date='max').show()
+
+#  see the output if we provide None in the date
+covid19_class_obj.get_overall_numbers(date=None).orderBy(F.desc("date")).show(5, False)
+
+
+#  get the cases for all the counties for the latest date
+covid19_class_obj.get_county_numbers(date='max', county=None).show(10, False)
+
+
+
+#  all the countuies for all the dates
+covid19_class_obj.get_county_numbers(date=None, county=None).orderBy("county", "date").show(100, False)
+
+
